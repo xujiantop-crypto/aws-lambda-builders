@@ -56,9 +56,13 @@ class SubprocessUv:
 
     def find_python(self, python_version: str) -> Optional[str]:
         """Find an already-installed interpreter matching the requested Python version."""
-        rc, stdout, _ = self.run_uv_command(["python", "find", "--no-project", "--no-python-downloads", python_version])
+        rc, stdout, stderr = self.run_uv_command(
+            ["python", "find", "--no-project", "--no-python-downloads", python_version]
+        )
         if rc == 0 and stdout:
             return stdout.strip()
+        diagnostic = stderr.strip() or stdout.strip() or "no diagnostic output"
+        LOG.warning("Could not locate target Python %s via uv (exit code %d): %s", python_version, rc, diagnostic)
         return None
 
     def run_uv_command(self, args: List[str], cwd: Optional[str] = None, env: Optional[Dict[str, str]] = None) -> tuple:
@@ -143,22 +147,14 @@ class UvRunner:
         args.extend(["--target", os.path.abspath(target_dir)])
 
         target_python = None
-        compile_bytecode = False
         if config.compile_bytecode:
             if python_version:
                 target_python = self._uv.find_python(python_version)
-                compile_bytecode = target_python is not None
-                if not compile_bytecode:
-                    LOG.warning(
-                        "Target Python %s is not installed; skipping bytecode compilation",
-                        python_version,
-                    )
             else:
                 LOG.warning("Target Python version is unavailable; skipping bytecode compilation")
 
-        # Add configuration arguments. The effective bytecode setting is decided together with
-        # interpreter selection so compilation can never run without a matching target interpreter.
-        args.extend(config.to_uv_args(compile_bytecode=compile_bytecode))
+        # Add configuration arguments that are independent of interpreter selection.
+        args.extend(config.to_uv_args())
 
         # Add platform-specific arguments
         if python_version:
@@ -168,6 +164,10 @@ class UvRunner:
             # could resolve differently when the install command runs.
             if target_python:
                 args.extend(["--python", target_python])
+
+        # Keep the bytecode flag next to interpreter selection so compilation can never be enabled
+        # without an explicitly resolved interpreter matching the target runtime.
+        args.append("--compile-bytecode" if target_python else "--no-compile-bytecode")
 
         if platform and architecture:
             # UV pip install uses --python-platform format

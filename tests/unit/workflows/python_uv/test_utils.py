@@ -106,25 +106,7 @@ class TestUvConfig(TestCase):
     def test_uv_config_defaults(self):
         config = UvConfig()
         args = config.to_uv_args()
-        self.assertEqual(args, ["--no-compile-bytecode"])
-
-    def test_uv_config_can_enable_bytecode_compilation(self):
-        config = UvConfig(compile_bytecode=True)
-        args = config.to_uv_args()
-        self.assertIn("--compile-bytecode", args)
-        self.assertNotIn("--no-compile-bytecode", args)
-
-    def test_uv_config_explicitly_disables_bytecode_compilation(self):
-        config = UvConfig(compile_bytecode=False)
-        args = config.to_uv_args()
-        self.assertIn("--no-compile-bytecode", args)
-        self.assertNotIn("--compile-bytecode", args)
-
-    def test_uv_config_accepts_effective_bytecode_override(self):
-        config = UvConfig(compile_bytecode=True)
-        args = config.to_uv_args(compile_bytecode=False)
-        self.assertIn("--no-compile-bytecode", args)
-        self.assertNotIn("--compile-bytecode", args)
+        self.assertEqual(args, [])
 
     def test_uv_config_with_index_url(self):
         config = UvConfig(index_url="https://pypi.org/simple/")
