@@ -136,11 +136,16 @@ class UvRunner:
         args.extend(["--target", os.path.abspath(target_dir)])
 
         # Add configuration arguments
-        args.extend(config.to_uv_args(python_version=python_version))
+        args.extend(config.to_uv_args())
 
         # Add platform-specific arguments
         if python_version:
             args.extend(["--python-version", python_version])
+
+            # UV performs bytecode compilation with its selected interpreter. Pin that interpreter
+            # to the target runtime instead of relying on UV_PYTHON, VIRTUAL_ENV, or PATH discovery.
+            if config.compile_bytecode:
+                args.extend(["--python", python_version])
 
         if platform and architecture:
             # UV pip install uses --python-platform format

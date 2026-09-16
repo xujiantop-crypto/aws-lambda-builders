@@ -1,5 +1,4 @@
 import os
-import sys
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -125,34 +124,37 @@ class TestUvRunner(TestCase):
         self.assertIn("-r", args_called)
         self.assertIn("/path/to/requirements.txt", args_called)
 
-    def test_install_requirements_compiles_bytecode_for_matching_python(self):
+    def test_install_requirements_compiles_bytecode_with_target_python(self):
         self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
-        host_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
 
         self.uv_runner.install_requirements(
             requirements_path="/path/to/requirements.txt",
             target_dir="/target",
             config=UvConfig(compile_bytecode=True),
-            python_version=host_python_version,
+            python_version="3.13",
         )
 
         args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
         self.assertIn("--compile-bytecode", args_called)
         self.assertNotIn("--no-compile-bytecode", args_called)
+        self.assertEqual(args_called[args_called.index("--python") + 1], "3.13")
+        self.assertEqual(args_called[args_called.index("--python-version") + 1], "3.13")
 
-    def test_install_requirements_disables_bytecode_for_mismatched_python(self):
+    def test_install_requirements_does_not_select_python_when_bytecode_disabled(self):
         self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
 
         self.uv_runner.install_requirements(
             requirements_path="/path/to/requirements.txt",
             target_dir="/target",
-            config=UvConfig(compile_bytecode=True),
-            python_version="0.0",
+            config=UvConfig(compile_bytecode=False),
+            python_version="3.13",
         )
 
         args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
         self.assertIn("--no-compile-bytecode", args_called)
         self.assertNotIn("--compile-bytecode", args_called)
+        self.assertNotIn("--python", args_called)
+        self.assertEqual(args_called[args_called.index("--python-version") + 1], "3.13")
 
     def test_install_requirements_resolves_relative_target_to_absolute(self):
         # UV runs with cwd=project_dir, so a relative --target must be resolved to an absolute path
