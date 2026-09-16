@@ -120,6 +120,12 @@ class TestUvConfig(TestCase):
         self.assertIn("--no-compile-bytecode", args)
         self.assertNotIn("--compile-bytecode", args)
 
+    def test_uv_config_accepts_effective_bytecode_override(self):
+        config = UvConfig(compile_bytecode=True)
+        args = config.to_uv_args(compile_bytecode=False)
+        self.assertIn("--no-compile-bytecode", args)
+        self.assertNotIn("--compile-bytecode", args)
+
     def test_uv_config_with_index_url(self):
         config = UvConfig(index_url="https://pypi.org/simple/")
         args = config.to_uv_args()

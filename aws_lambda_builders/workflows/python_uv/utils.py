@@ -118,7 +118,7 @@ class UvConfig:
         self.exclude_newer = exclude_newer
         self.generate_hashes = generate_hashes
 
-    def to_uv_args(self) -> List[str]:
+    def to_uv_args(self, compile_bytecode: Optional[bool] = None) -> List[str]:
         """Convert configuration to UV command line arguments."""
         args = []
 
@@ -141,7 +141,9 @@ class UvConfig:
             args.extend(["--resolution", self.resolution])
 
         # Always pass an explicit value so UV_COMPILE_BYTECODE cannot override this configuration.
-        args.append("--compile-bytecode" if self.compile_bytecode else "--no-compile-bytecode")
+        if compile_bytecode is None:
+            compile_bytecode = self.compile_bytecode
+        args.append("--compile-bytecode" if compile_bytecode else "--no-compile-bytecode")
 
         if self.exclude_newer:
             args.extend(["--exclude-newer", self.exclude_newer])

@@ -54,6 +54,13 @@ class SubprocessUv:
             pass
         return None
 
+    def find_python(self, python_version: str) -> Optional[str]:
+        """Find an already-installed interpreter matching the requested Python version."""
+        rc, stdout, _ = self.run_uv_command(["python", "find", "--no-project", "--no-python-downloads", python_version])
+        if rc == 0 and stdout:
+            return stdout.strip()
+        return None
+
     def run_uv_command(self, args: List[str], cwd: Optional[str] = None, env: Optional[Dict[str, str]] = None) -> tuple:
         """
         Execute UV command with given arguments.
@@ -135,17 +142,32 @@ class UvRunner:
         # under the source directory instead of the build root.
         args.extend(["--target", os.path.abspath(target_dir)])
 
-        # Add configuration arguments
-        args.extend(config.to_uv_args())
+        target_python = None
+        compile_bytecode = False
+        if config.compile_bytecode:
+            if python_version:
+                target_python = self._uv.find_python(python_version)
+                compile_bytecode = target_python is not None
+                if not compile_bytecode:
+                    LOG.warning(
+                        "Target Python %s is not installed; skipping bytecode compilation",
+                        python_version,
+                    )
+            else:
+                LOG.warning("Target Python version is unavailable; skipping bytecode compilation")
+
+        # Add configuration arguments. The effective bytecode setting is decided together with
+        # interpreter selection so compilation can never run without a matching target interpreter.
+        args.extend(config.to_uv_args(compile_bytecode=compile_bytecode))
 
         # Add platform-specific arguments
         if python_version:
             args.extend(["--python-version", python_version])
 
-            # UV performs bytecode compilation with its selected interpreter. Pin that interpreter
-            # to the target runtime instead of relying on UV_PYTHON, VIRTUAL_ENV, or PATH discovery.
-            if config.compile_bytecode:
-                args.extend(["--python", python_version])
+            # Use the exact interpreter found by UV instead of repeating a version request that
+            # could resolve differently when the install command runs.
+            if target_python:
+                args.extend(["--python", target_python])
 
         if platform and architecture:
             # UV pip install uses --python-platform format

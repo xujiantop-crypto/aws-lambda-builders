@@ -91,6 +91,33 @@ class TestSubprocessUv(TestCase):
 
         self.assertIsNone(version)
 
+    @patch("aws_lambda_builders.workflows.python_uv.packager.OSUtils")
+    def test_find_python_success(self, mock_osutils_class):
+        mock_osutils = Mock()
+        mock_osutils.which.return_value = "/usr/bin/uv"
+        mock_osutils.run_subprocess.return_value = (0, "/usr/bin/python3.13\n", "")
+        mock_osutils_class.return_value = mock_osutils
+
+        subprocess_uv = SubprocessUv()
+
+        self.assertEqual(subprocess_uv.find_python("3.13"), "/usr/bin/python3.13")
+        mock_osutils.run_subprocess.assert_called_once_with(
+            ["/usr/bin/uv", "python", "find", "--no-project", "--no-python-downloads", "3.13"],
+            cwd=None,
+            env=None,
+        )
+
+    @patch("aws_lambda_builders.workflows.python_uv.packager.OSUtils")
+    def test_find_python_failure(self, mock_osutils_class):
+        mock_osutils = Mock()
+        mock_osutils.which.return_value = "/usr/bin/uv"
+        mock_osutils.run_subprocess.return_value = (2, "", "interpreter not found")
+        mock_osutils_class.return_value = mock_osutils
+
+        subprocess_uv = SubprocessUv()
+
+        self.assertIsNone(subprocess_uv.find_python("3.9"))
+
 
 class TestUvRunner(TestCase):
     def setUp(self):
@@ -126,6 +153,7 @@ class TestUvRunner(TestCase):
 
     def test_install_requirements_compiles_bytecode_with_target_python(self):
         self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
+        self.mock_subprocess_uv.find_python.return_value = "/usr/bin/python3.13"
 
         self.uv_runner.install_requirements(
             requirements_path="/path/to/requirements.txt",
@@ -137,8 +165,45 @@ class TestUvRunner(TestCase):
         args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
         self.assertIn("--compile-bytecode", args_called)
         self.assertNotIn("--no-compile-bytecode", args_called)
-        self.assertEqual(args_called[args_called.index("--python") + 1], "3.13")
+        self.assertEqual(args_called[args_called.index("--python") + 1], "/usr/bin/python3.13")
         self.assertEqual(args_called[args_called.index("--python-version") + 1], "3.13")
+        self.mock_subprocess_uv.find_python.assert_called_once_with("3.13")
+
+    def test_install_requirements_skips_bytecode_when_target_python_is_unavailable(self):
+        self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
+        self.mock_subprocess_uv.find_python.return_value = None
+
+        with self.assertLogs("aws_lambda_builders.workflows.python_uv.packager", level="WARNING") as logs:
+            self.uv_runner.install_requirements(
+                requirements_path="/path/to/requirements.txt",
+                target_dir="/target",
+                config=UvConfig(compile_bytecode=True),
+                python_version="3.9",
+            )
+
+        args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
+        self.assertIn("--no-compile-bytecode", args_called)
+        self.assertNotIn("--compile-bytecode", args_called)
+        self.assertNotIn("--python", args_called)
+        self.assertEqual(args_called[args_called.index("--python-version") + 1], "3.9")
+        self.assertIn("Target Python 3.9 is not installed", logs.output[0])
+
+    def test_install_requirements_skips_bytecode_without_target_python_version(self):
+        self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
+
+        with self.assertLogs("aws_lambda_builders.workflows.python_uv.packager", level="WARNING") as logs:
+            self.uv_runner.install_requirements(
+                requirements_path="/path/to/requirements.txt",
+                target_dir="/target",
+                config=UvConfig(compile_bytecode=True),
+            )
+
+        args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
+        self.assertIn("--no-compile-bytecode", args_called)
+        self.assertNotIn("--compile-bytecode", args_called)
+        self.assertNotIn("--python", args_called)
+        self.mock_subprocess_uv.find_python.assert_not_called()
+        self.assertIn("Target Python version is unavailable", logs.output[0])
 
     def test_install_requirements_does_not_select_python_when_bytecode_disabled(self):
         self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
@@ -155,6 +220,7 @@ class TestUvRunner(TestCase):
         self.assertNotIn("--compile-bytecode", args_called)
         self.assertNotIn("--python", args_called)
         self.assertEqual(args_called[args_called.index("--python-version") + 1], "3.13")
+        self.mock_subprocess_uv.find_python.assert_not_called()
 
     def test_install_requirements_resolves_relative_target_to_absolute(self):
         # UV runs with cwd=project_dir, so a relative --target must be resolved to an absolute path
