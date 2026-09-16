@@ -1,4 +1,5 @@
 import os
+import sys
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -123,6 +124,35 @@ class TestUvRunner(TestCase):
         self.assertIn("install", args_called)
         self.assertIn("-r", args_called)
         self.assertIn("/path/to/requirements.txt", args_called)
+
+    def test_install_requirements_compiles_bytecode_for_matching_python(self):
+        self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
+        host_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+
+        self.uv_runner.install_requirements(
+            requirements_path="/path/to/requirements.txt",
+            target_dir="/target",
+            config=UvConfig(compile_bytecode=True),
+            python_version=host_python_version,
+        )
+
+        args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
+        self.assertIn("--compile-bytecode", args_called)
+        self.assertNotIn("--no-compile-bytecode", args_called)
+
+    def test_install_requirements_disables_bytecode_for_mismatched_python(self):
+        self.mock_subprocess_uv.run_uv_command.return_value = (0, "success", "")
+
+        self.uv_runner.install_requirements(
+            requirements_path="/path/to/requirements.txt",
+            target_dir="/target",
+            config=UvConfig(compile_bytecode=True),
+            python_version="0.0",
+        )
+
+        args_called = self.mock_subprocess_uv.run_uv_command.call_args[0][0]
+        self.assertIn("--no-compile-bytecode", args_called)
+        self.assertNotIn("--compile-bytecode", args_called)
 
     def test_install_requirements_resolves_relative_target_to_absolute(self):
         # UV runs with cwd=project_dir, so a relative --target must be resolved to an absolute path

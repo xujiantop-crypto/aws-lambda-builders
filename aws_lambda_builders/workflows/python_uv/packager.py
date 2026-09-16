@@ -136,7 +136,7 @@ class UvRunner:
         args.extend(["--target", os.path.abspath(target_dir)])
 
         # Add configuration arguments
-        args.extend(config.to_uv_args())
+        args.extend(config.to_uv_args(python_version=python_version))
 
         # Add platform-specific arguments
         if python_version:

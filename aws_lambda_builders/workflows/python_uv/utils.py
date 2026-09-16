@@ -5,6 +5,7 @@ Commonly used utilities for Python UV workflow
 import os
 import shutil
 import subprocess
+import sys
 from typing import List, Optional
 
 from aws_lambda_builders.workflows.python_pip.utils import OSUtils as BaseOSUtils
@@ -104,7 +105,7 @@ class UvConfig:
         no_cache: bool = False,
         prerelease: str = "disallow",
         resolution: str = "highest",
-        compile_bytecode: bool = True,
+        compile_bytecode: bool = False,
         exclude_newer: Optional[str] = None,
         generate_hashes: bool = False,
     ):
@@ -118,7 +119,7 @@ class UvConfig:
         self.exclude_newer = exclude_newer
         self.generate_hashes = generate_hashes
 
-    def to_uv_args(self) -> List[str]:
+    def to_uv_args(self, python_version: Optional[str] = None) -> List[str]:
         """Convert configuration to UV command line arguments."""
         args = []
 
@@ -140,8 +141,15 @@ class UvConfig:
         if self.resolution != "highest":
             args.extend(["--resolution", self.resolution])
 
-        if self.compile_bytecode:
-            args.append("--compile-bytecode")
+        compile_bytecode = self.compile_bytecode
+        if python_version:
+            # UV compiles with the build host's interpreter. Bytecode from a different Python minor
+            # version cannot be loaded by the target Lambda runtime.
+            host_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+            compile_bytecode = compile_bytecode and python_version == host_python_version
+
+        # Always pass an explicit value so UV_COMPILE_BYTECODE cannot override this configuration.
+        args.append("--compile-bytecode" if compile_bytecode else "--no-compile-bytecode")
 
         if self.exclude_newer:
             args.extend(["--exclude-newer", self.exclude_newer])

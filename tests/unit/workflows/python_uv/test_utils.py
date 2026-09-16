@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 from unittest import TestCase
 from unittest.mock import Mock
@@ -106,11 +107,25 @@ class TestUvConfig(TestCase):
     def test_uv_config_defaults(self):
         config = UvConfig()
         args = config.to_uv_args()
-        self.assertEqual(args, ["--compile-bytecode"])
+        self.assertEqual(args, ["--no-compile-bytecode"])
 
-    def test_uv_config_can_disable_bytecode_compilation(self):
+    def test_uv_config_can_enable_bytecode_compilation_for_matching_python(self):
+        host_python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        config = UvConfig(compile_bytecode=True)
+        args = config.to_uv_args(python_version=host_python_version)
+        self.assertIn("--compile-bytecode", args)
+        self.assertNotIn("--no-compile-bytecode", args)
+
+    def test_uv_config_disables_bytecode_compilation_for_mismatched_python(self):
+        config = UvConfig(compile_bytecode=True)
+        args = config.to_uv_args(python_version="0.0")
+        self.assertIn("--no-compile-bytecode", args)
+        self.assertNotIn("--compile-bytecode", args)
+
+    def test_uv_config_explicitly_disables_bytecode_compilation(self):
         config = UvConfig(compile_bytecode=False)
         args = config.to_uv_args()
+        self.assertIn("--no-compile-bytecode", args)
         self.assertNotIn("--compile-bytecode", args)
 
     def test_uv_config_with_index_url(self):
