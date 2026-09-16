@@ -140,6 +140,9 @@ class UvConfig:
         if self.resolution != "highest":
             args.extend(["--resolution", self.resolution])
 
+        if self.compile_bytecode:
+            args.append("--compile-bytecode")
+
         if self.exclude_newer:
             args.extend(["--exclude-newer", self.exclude_newer])
 

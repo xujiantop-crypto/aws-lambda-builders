@@ -106,7 +106,12 @@ class TestUvConfig(TestCase):
     def test_uv_config_defaults(self):
         config = UvConfig()
         args = config.to_uv_args()
-        self.assertEqual(args, [])
+        self.assertEqual(args, ["--compile-bytecode"])
+
+    def test_uv_config_can_disable_bytecode_compilation(self):
+        config = UvConfig(compile_bytecode=False)
+        args = config.to_uv_args()
+        self.assertNotIn("--compile-bytecode", args)
 
     def test_uv_config_with_index_url(self):
         config = UvConfig(index_url="https://pypi.org/simple/")
